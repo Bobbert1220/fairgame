@@ -23,6 +23,7 @@ import math
 import os
 import platform
 import time
+import re
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
@@ -737,7 +738,13 @@ class Amazon:
                         continue
 
             try:
-                price = parse_price(prices[idx].get_attribute("innerHTML"))
+                price = parse_price(
+                    re.sub(
+                        r"(?:\s+|(?:&nbsp;)+)",
+                        "",
+                        prices[idx].get_attribute("innerHTML").strip(),
+                    )
+                )
             except IndexError:
                 log.debug("Price index error")
                 return False
@@ -1408,7 +1415,12 @@ class Amazon:
             ):
                 try:
                     log.info("Stuck on a captcha... Lets try to solve it.")
-                    captcha = AmazonCaptcha.fromdriver(self.driver)
+                    captcha_link = self.driver.page_source.split('<img src="')[1].split(
+                        '">'
+                    )[
+                        0
+                    ]  # extract captcha link
+                    captcha = AmazonCaptcha.fromlink(captcha_link)
                     solution = captcha.solve()
                     log.info(f"The solution is: {solution}")
                     if solution == "Not solved":
@@ -1770,7 +1782,9 @@ def get_shipping_costs(tree, free_shipping_string):
                 return FREE_SHIPPING_PRICE
             else:
                 # will it parse?
-                shipping_cost: Price = parse_price(shipping_span_text)
+                shipping_cost: Price = parse_price(
+                    re.sub(r"(?:\s+|(?:&nbsp;)+)", "", shipping_span_text)
+                )
                 if shipping_cost.currency is not None:
                     log.debug(
                         f"Found parseable price with currency symbol: {shipping_cost.currency}"
@@ -1820,7 +1834,9 @@ def get_alt_shipping_costs(tree, free_shipping_string) -> Price:
             # Look for a price
             for shipping_span in shipping_spans:
                 if shipping_span.text and shipping_span.text != "+":
-                    shipping_cost: Price = parse_price(shipping_span.text)
+                    shipping_cost: Price = parse_price(
+                        re.sub(r"(?:\s+|(?:&nbsp;)+)", "", shipping_span.text.strip())
+                    )
                     if shipping_cost.currency is not None:
                         log.debug(
                             f"Found parseable price with currency symbol: {shipping_cost.currency}"
@@ -1855,7 +1871,9 @@ def get_alt_shipping_costs(tree, free_shipping_string) -> Price:
                 # & Free Shipping message
                 log.debug("Found '& Free', assuming zero.")
             elif shipping_spans[0].text.startswith("+"):
-                return parse_price(shipping_spans[0].text.strip())
+                return parse_price(
+                    re.sub(r"(?:\s+|(?:&nbsp;)+)", "", shipping_spans[0].text.strip())
+                )
         elif len(shipping_bs) > 0:
             for message_node in shipping_bs:
 
